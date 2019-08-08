@@ -1,0 +1,101 @@
+<#include "/macro.include"/>
+<#assign className = table.className>   
+<#assign classNameFirstLower = table.classNameFirstLower>   
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<#macro mapperEl value>${r"#{"}${value}}</#macro>
+<#macro namespace>${className}.</#macro>
+
+<mapper namespace="${className}">
+
+	<resultMap id="RM" type="${basepackage}.model.${className}">
+        <#list table.columns as column>
+        <result property="${column.columnNameLower}" column="${column.sqlName}"/>
+		</#list>
+	</resultMap>
+
+	<sql id="COLUMNS">
+	  <![CDATA[
+		<#list table.columns as column>t.${column.sqlName}<#if column_has_next>,</#if></#list>
+	  ]]>
+	</sql>
+
+	<insert id="insert" parameterType="${basepackage}.model.${className}" useGeneratedKeys="true" keyProperty="${table.idColumn.columnNameFirstLower}">
+		<selectKey keyProperty="id" resultType="java.lang.Long" order="BEFORE">
+			SELECT S_${table.sqlName}.NEXTVAL AS ID FROM DUAL
+		</selectKey>
+      <![CDATA[
+        INSERT INTO ${table.sqlName} (
+        <#list table.columns as column>
+        	${column.sqlName} <#if column_has_next>,</#if>
+        </#list>
+        ) VALUES (
+        <#list table.columns as column>
+        	<@mapperEl column.columnNameFirstLower/> <#if column_has_next>,</#if>
+        </#list>        
+        )
+      ]]>
+	</insert>
+    
+	<update id="update" parameterType="${basepackage}.model.${className}">
+      <![CDATA[
+        UPDATE ${table.sqlName} SET
+	        <#list table.notPkColumns as column>
+	        ${column.sqlName} = <@mapperEl column.columnNameFirstLower/> <#if column_has_next>,</#if>
+	        </#list>
+        WHERE 
+        	<#list table.compositeIdColumns as column>
+	        ${column.sqlName} = <@mapperEl column.columnNameLower/> <#if column_has_next>,</#if>
+	        </#list>	        
+      ]]>
+	</update>
+
+    <delete id="delete" parameterType="${basepackage}.model.${className}">
+      <![CDATA[
+        DELETE FROM ${table.sqlName} WHERE
+        <#list table.compositeIdColumns as column>
+        ${column.sqlName} = <@mapperEl 'id'/> <#if column_has_next>,</#if>
+		</#list>
+      ]]>
+    </delete>
+	
+	<sql id="WHERES">
+	  <where>	      				
+	      <#list table.columns as column>	        
+	        <if test="${column.columnNameFirstLower}!=null">
+				AND t.${column.sqlName} = <@mapperEl column.columnNameFirstLower/>
+		    </if>
+	      </#list>			
+		</where>
+	</sql>
+    
+    <select id="uniqueResult" parameterType="${basepackage}.model.${className}" resultMap="RM">
+		SELECT * FROM ( SELECT row_.*, ROWNUM rownum_ FROM (
+		SELECT <include refid="COLUMNS" />
+		FROM ${table.sqlName} t 
+	    <include refid="WHERES" />
+	    ) row_ WHERE ROWNUM  &lt;= 1) WHERE rownum_ &gt; 0
+	</select>
+	  
+	<select id="list" parameterType="${basepackage}.model.${className}" resultMap="RM">
+		<if test="size!=null and offset!=null">
+			SELECT * FROM ( SELECT row_.*, ROWNUM rownum_ FROM (
+		</if>
+		SELECT <include refid="COLUMNS" />
+		FROM ${table.sqlName} t 
+	    <include refid="WHERES" />
+		<if test="size!=null and offset!=null">
+			) row_ WHERE ROWNUM  &lt;= ${r'${size}'}+${r'${offset}'}) WHERE rownum_ &gt; ${r'${offset}'}
+		</if>
+	</select>
+
+    <select id="count" parameterType="${basepackage}.model.${className}" resultType="int">
+       SELECT COUNT(1) FROM ${table.sqlName} t 
+       <include refid="WHERES" />
+    </select>
+	
+</mapper>
+
